@@ -4,51 +4,47 @@ async function getData() {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/?key=${apiKey}&includeGridData=true`;
   const result = await fetch(url)
   const { sheets } = await result.json();
-  console.log('sheets', sheets);
-  const firstSheet = sheets[1];
-  const data = firstSheet.data[0].rowData
-      .filter((_, index) => index !== 0) // Mulai dari index 1 (menghindari nama kolom)
-      .map(row => {
-          const { values } = row;
-          return {
-              name: values[0].formattedValue,
-              email: values[1].formattedValue,
-          }
-      })
+  const data = []
+  for (const sheet of sheets) {
+    if (sheet.properties.title === 'originalsheet') {
+      continue; // skip this sheet
+    } else {
+      const rowData = sheet.data[0].rowData;
+      for (const [index, row] of rowData.entries()) {
+        if (index === 0) continue; // skip header row
+        const { values } = row;
+        data.push({
+          consumable: values[0]?.formattedValue || '',
+          isi: values[1]?.formattedValue || '',
+          tanggal: values[2]?.formattedValue || '',
+          inputIsi: values[3]?.formattedValue || '',
+          mesin: sheet.properties.title.split(' ')[1] || '' // get mesin number from sheet title
+        });
+      }
+    }
+  }
   return data;
 }
-
-
-function dataItemTemplate(item) {
-  return (
-    `<li>
-      <p>${item.name}</p>
-      <p>${item.email}</p>
-    </li>`
-  )
-}
-
-async function renderData() {
-  const wrapperDOM = document.getElementById('wrapper');
-  try {
-    const data = await getData();
-    wrapperDOM.innerHTML = data.map(item => dataItemTemplate(item)).join('');
-  } catch (error) {
-    wrapperDOM.innerHTML = error
-  }
-}
-
-// renderData();
 
 const mesinSelect = document.getElementById("consumable-mesin");
 
   // loop from 1 to 65 and add options
-  for (let i = 1; i <= 65; i++) {
+for (let i = 1; i <= 65; i++) {
     let option = document.createElement("option");
     option.value = i;
     option.textContent = i;
     mesinSelect.appendChild(option);
-  }
+}
+
+const searchMesinSelect = document.getElementById("consumable-search-mesin");
+
+  // loop from 1 to 65 and add options
+for (let i = 1; i <= 65; i++) {
+    let option = document.createElement("option");
+    option.value = i;
+    option.textContent = i;
+    searchMesinSelect.appendChild(option);
+}
 
 $("form").on("submit", function(e) {
   e.preventDefault();
@@ -63,8 +59,7 @@ $("form").on("submit", function(e) {
 
   console.log('data', data);
 
-//   const webAppUrl = "https://script.google.com/macros/s/AKfycbxrt96YRFQV2pahMqL0RJigabZuOYfTVZTnOfWA8uHLjKCPgqVATq7fDpR8yZR0F9HyPQ/exec";
-const webAppUrl = "https://script.google.com/macros/s/AKfycbw-hIj5bfdbe9TJhrSG7zQFgjFEslj1sL64qmNADzedHPS6aCxtfZ2A8CzQ1R-Yz2lUIg/exec"  
+const webAppUrl = "https://script.google.com/macros/s/AKfycbwa_E0U4XuqyAmINjtsYcL7QbOcWZqlihMBWh4m51hwqxoXiOIAGZtLHx3oFvy11Qpl-w/exec"
 $.post(webAppUrl, data, function(response) {
   // Remove old alerts
   $(".alert").remove();
@@ -87,5 +82,52 @@ $.post(webAppUrl, data, function(response) {
 
     $("form").trigger("reset");
 });
+});
 
+// handle search
+btnSearch.addEventListener("click", async () => {
+  const selectedMesin = searchMesinSelect.value;
+  if (!selectedMesin) {
+    alert("⚠️ Pilih mesin dulu!");
+    return;
+  }
+
+  // get data from Google Sheet
+  const data = await getData(); // this already returns all data
+  console.log('all data', data);
+
+  // filter by mesin
+  console.log('selectedMesin', selectedMesin);
+  const filtered = data.filter(row => row.mesin === selectedMesin.toString());
+
+  if (filtered.length === 0) {
+    searchResult.innerHTML = `<div class="alert alert-warning">❌ Tidak ada data untuk Mesin ${selectedMesin}</div>`;
+    return;
+  }
+
+  // build table
+  let html = `<h5>Data Mesin ${selectedMesin}</h5>
+              <table class="table table-bordered">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Consumable</th>
+                    <th>ISI</th>
+                    <th>Tanggal</th>
+                    <th>Input ISI</th>
+                  </tr>
+                </thead>
+                <tbody>`;
+  filtered.forEach((row, idx) => {
+    html += `<tr>
+              <td>${idx + 1}</td>
+              <td>${row.consumable}</td>
+              <td>${row.isi}</td>
+              <td>${row.tanggal}</td>
+              <td>${row.inputIsi}</td>
+            </tr>`;
+  });
+  html += `</tbody></table>`;
+
+  searchResult.innerHTML = html;
 });
